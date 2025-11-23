@@ -458,10 +458,6 @@ function WichtelApp() {
               Zurück
             </button>
 
-            <div className="mt-6 p-4 bg-yellow-50 rounded-lg text-sm text-gray-700">
-              <p className="font-semibold mb-2">Demo-Passwort:</p>
-              <code className="bg-gray-100 px-2 py-1 rounded">wichtel2024</code>
-            </div>
           </div>
         </div>
       </div>
