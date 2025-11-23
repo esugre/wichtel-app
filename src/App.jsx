@@ -263,9 +263,25 @@ function WichtelApp() {
   };
 
   /**
-   * updateParticipantProfile - Speichert Profil-Änderungen
+   * updateParticipantProfile - Aktualisiert nur den lokalen State (OHNE Speichern)
+   * 
+   * Wird bei jeder Tastatureingabe aufgerufen
+   * Speichert NICHT in localStorage (das macht saveParticipantProfile)
    */
   const updateParticipantProfile = (updatedProfile) => {
+    // Aktualisiere nur den lokalen State
+    setSelectedParticipant({
+      ...selectedParticipant,
+      profile: updatedProfile
+    });
+  };
+
+  /**
+   * saveParticipantProfile - Speichert das Profil dauerhaft
+   * 
+   * Wird nur beim Klick auf den Speichern-Button aufgerufen
+   */
+  const saveParticipantProfile = () => {
     const updatedGroups = groups.map(group => {
       if (group.id === selectedGroup.id) {
         return {
@@ -274,7 +290,7 @@ function WichtelApp() {
             if (p.id === selectedParticipant.id) {
               return {
                 ...p,
-                profile: updatedProfile
+                profile: selectedParticipant.profile
               };
             }
             return p;
@@ -286,12 +302,6 @@ function WichtelApp() {
 
     setGroups(updatedGroups);
     saveGroups(updatedGroups);
-    
-    // Aktualisiere lokalen State
-    setSelectedParticipant({
-      ...selectedParticipant,
-      profile: updatedProfile
-    });
     
     alert('Profil gespeichert! ✓');
   };
@@ -641,6 +651,15 @@ function WichtelApp() {
                   rows="3"
                 />
               </div>
+
+              {/* SPEICHERN-BUTTON */}
+              <button
+                onClick={saveParticipantProfile}
+                className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                <Gift className="w-5 h-5" />
+                Profil speichern
+              </button>
             </div>
           </div>
 
