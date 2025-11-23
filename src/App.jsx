@@ -2,126 +2,86 @@ import React, { useState, useEffect } from 'react';
 import { Gift, Users, Shuffle, Plus, Trash2, Upload, Eye, EyeOff } from 'lucide-react';
 
 /**
- * WICHTEL-WEBAPP - Hauptkomponente
+ * WICHTEL-WEBAPP - Hauptkomponente (Netlify-Version)
  * 
- * Was ist React?
- * React ist eine JavaScript-Bibliothek, die es einfacher macht, interaktive UIs zu bauen.
- * Statt HTML direkt zu manipulieren, beschreibst du, WIE die UI aussehen SOLL,
- * und React kümmert sich um die Updates.
- * 
- * Was sind "Hooks"? (useState, useEffect)
- * Hooks sind spezielle React-Funktionen, die mit "use" beginnen.
- * - useState: Speichert Daten, die sich ändern können (z.B. welche Seite gerade angezeigt wird)
- * - useEffect: Führt Code aus, wenn sich etwas ändert (z.B. Daten laden beim Start)
+ * Diese Version nutzt localStorage statt window.storage
+ * localStorage ist ein Browser-Feature, das Daten lokal speichert
+ * - Funktioniert in jedem Browser
+ * - Daten bleiben auch nach Seiten-Reload erhalten
+ * - Wird pro Domain gespeichert
  */
 
 function WichtelApp() {
   // ==================== STATE MANAGEMENT ====================
-  /**
-   * useState erklärt:
-   * const [variable, setVariable] = useState(initialerWert);
-   * 
-   * - variable: Aktuelle Wert (lesbar)
-   * - setVariable: Funktion zum Ändern des Werts
-   * - initialerWert: Startwert beim ersten Laden
-   * 
-   * Beispiel: const [alter, setAlter] = useState(25);
-   * - alter ist 25
-   * - Mit setAlter(30) wird alter auf 30 gesetzt
-   * - React rendert die Komponente neu, wenn sich der State ändert
-   */
-
-  // Welche Seite wird gerade angezeigt? 'home', 'admin', 'participant', 'view'
   const [currentView, setCurrentView] = useState('home');
-  
-  // Alle Wichtelgruppen (Array von Objekten)
   const [groups, setGroups] = useState([]);
-  
-  // Die aktuell ausgewählte Gruppe (ein Objekt oder null)
   const [selectedGroup, setSelectedGroup] = useState(null);
-  
-  // Der aktuell ausgewählte Teilnehmer (ein Objekt oder null)
   const [selectedParticipant, setSelectedParticipant] = useState(null);
-  
-  // Admin-Passwort (einfache Authentifizierung)
   const [adminPassword, setAdminPassword] = useState('');
-  
-  // Ist der Admin eingeloggt? (true/false)
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
 
   // ==================== DATEN LADEN UND SPEICHERN ====================
+  
   /**
-   * useEffect erklärt:
-   * useEffect(() => { code }, [abhängigkeiten]);
-   * 
-   * - Der Code wird ausgeführt, wenn sich die Abhängigkeiten ändern
-   * - Leeres Array [] = nur beim ersten Laden
-   * - Kein Array = bei jedem Render
-   * - [variable] = wenn sich "variable" ändert
-   * 
-   * Hier: Laden wir die gespeicherten Gruppen beim Start der App
+   * useEffect - Lädt Daten beim Start der App
    */
   useEffect(() => {
     loadGroups();
-  }, []); // Leeres Array = nur einmal beim Start ausführen
+  }, []);
 
   /**
-   * loadGroups - Lädt gespeicherte Gruppen aus dem Storage
+   * loadGroups - Lädt gespeicherte Gruppen aus localStorage
    * 
-   * async/await erklärt:
-   * - async: Markiert eine Funktion als asynchron (kann auf etwas warten)
-   * - await: Wartet auf das Ergebnis einer Promise (hier: Storage-Zugriff)
-   * - try/catch: Fängt Fehler ab, falls etwas schiefgeht
+   * localStorage erklärt:
+   * - localStorage.getItem('key') holt einen gespeicherten Wert
+   * - Gibt einen String zurück oder null wenn nicht vorhanden
+   * - JSON.parse() wandelt den String zurück in ein JavaScript-Objekt
    */
-  const loadGroups = async () => {
+  const loadGroups = () => {
     try {
-      // Versuche, gespeicherte Gruppen zu laden
-      // window.storage.get gibt ein Objekt zurück: { key, value, shared }
-      const result = await window.storage.get('wichtel-groups');
+      // Hole den gespeicherten String aus localStorage
+      const savedGroups = localStorage.getItem('wichtel-groups');
       
-      if (result && result.value) {
-        // JSON.parse wandelt einen String zurück in ein JavaScript-Objekt/Array
-        const loadedGroups = JSON.parse(result.value);
-        setGroups(loadedGroups);
+      if (savedGroups) {
+        // Wandle den JSON-String zurück in ein Array
+        const parsedGroups = JSON.parse(savedGroups);
+        setGroups(parsedGroups);
+        console.log('Gruppen geladen:', parsedGroups.length);
+      } else {
+        console.log('Keine gespeicherten Gruppen gefunden');
       }
     } catch (error) {
-      // Falls ein Fehler auftritt (z.B. keine Daten vorhanden), ignorieren wir ihn
-      console.log('Keine gespeicherten Gruppen gefunden - das ist okay beim ersten Start');
+      console.error('Fehler beim Laden:', error);
+      // Bei Fehler: Leeres Array verwenden
+      setGroups([]);
     }
   };
 
   /**
-   * saveGroups - Speichert alle Gruppen in den persistenten Storage
+   * saveGroups - Speichert alle Gruppen in localStorage
    * 
-   * Parameter:
-   * - updatedGroups: Die zu speichernden Gruppen
-   * 
-   * Warum eine separate Funktion?
-   * - Zentraler Ort für das Speichern
-   * - Einfacher zu warten und zu debuggen
-   * - Kann Error-Handling hinzufügen
+   * localStorage.setItem erklärt:
+   * - localStorage.setItem('key', 'value') speichert einen Wert
+   * - Kann nur Strings speichern, daher JSON.stringify()
+   * - Bleibt gespeichert bis der Browser-Cache gelöscht wird
    */
-  const saveGroups = async (updatedGroups) => {
+  const saveGroups = (updatedGroups) => {
     try {
-      // JSON.stringify wandelt ein JavaScript-Objekt in einen String um
-      // (Storage kann nur Strings speichern, keine komplexen Objekte)
-      await window.storage.set('wichtel-groups', JSON.stringify(updatedGroups));
+      // Wandle das Array in einen JSON-String um
+      const jsonString = JSON.stringify(updatedGroups);
+      
+      // Speichere in localStorage
+      localStorage.setItem('wichtel-groups', jsonString);
+      console.log('Gruppen gespeichert:', updatedGroups.length);
     } catch (error) {
       console.error('Fehler beim Speichern:', error);
-      alert('Fehler beim Speichern der Daten');
+      alert('Fehler beim Speichern der Daten. Ist der Browser-Speicher voll?');
     }
   };
 
   // ==================== ADMIN-FUNKTIONEN ====================
   
-  /**
-   * handleAdminLogin - Prüft das Admin-Passwort
-   * 
-   * In einer echten App würde das Passwort serverseitig geprüft werden!
-   * Hier: Einfache Client-seitige Prüfung (nur für Demo-Zwecke)
-   */
   const handleAdminLogin = () => {
-    // Einfaches Passwort (in echter App: verschlüsselt und serverseitig!)
     if (adminPassword === 'wichtel2024') {
       setIsAdminAuthenticated(true);
       setCurrentView('admin');
@@ -130,31 +90,18 @@ function WichtelApp() {
     }
   };
 
-  /**
-   * createGroup - Erstellt eine neue Wichtelgruppe
-   * 
-   * Wie funktioniert das Erstellen?
-   * 1. Generiere eine eindeutige ID (mit Date.now() - Millisekunden seit 1970)
-   * 2. Erstelle ein Gruppen-Objekt mit allen nötigen Eigenschaften
-   * 3. Füge die neue Gruppe zum Array hinzu
-   * 4. Speichere alles
-   */
   const createGroup = () => {
     const groupName = prompt('Name der Wichtelgruppe:');
-    if (!groupName) return; // Abbruch, falls leer
+    if (!groupName) return;
 
-    // Neues Gruppen-Objekt erstellen
     const newGroup = {
-      id: Date.now(), // Eindeutige ID (Timestamp in Millisekunden)
+      id: Date.now(),
       name: groupName,
-      participants: [], // Array für Teilnehmer (anfangs leer)
-      isShuffled: false, // Wurden die Wichtel schon zugeordnet?
-      createdAt: new Date().toISOString() // ISO-Format: "2024-12-15T10:30:00.000Z"
+      participants: [],
+      isShuffled: false,
+      createdAt: new Date().toISOString()
     };
 
-    // Spread-Operator (...) erklärt:
-    // [...groups] erstellt eine KOPIE des Arrays und fügt am Ende newGroup hinzu
-    // Warum nicht groups.push()? React erkennt Änderungen nur bei neuen Objekten!
     const updatedGroups = [...groups, newGroup];
     setGroups(updatedGroups);
     saveGroups(updatedGroups);
@@ -162,17 +109,6 @@ function WichtelApp() {
     alert(`Gruppe "${groupName}" erstellt!`);
   };
 
-  /**
-   * deleteGroup - Löscht eine Wichtelgruppe
-   * 
-   * Parameter:
-   * - groupId: Die ID der zu löschenden Gruppe
-   * 
-   * Array.filter erklärt:
-   * - Erstellt ein neues Array mit allen Elementen, für die die Bedingung true ist
-   * - g.id !== groupId bedeutet: Behalte alle Gruppen, deren ID NICHT groupId ist
-   * - Ergebnis: Alle Gruppen außer der gelöschten
-   */
   const deleteGroup = (groupId) => {
     if (!confirm('Gruppe wirklich löschen? Alle Daten gehen verloren!')) return;
     
@@ -182,64 +118,53 @@ function WichtelApp() {
   };
 
   /**
-   * addParticipant - Fügt einen neuen Teilnehmer zur Gruppe hinzu
+   * addParticipant - Fügt einen neuen Teilnehmer hinzu
    * 
-   * Parameter:
-   * - groupId: Die ID der Gruppe
-   * 
-   * Array.map erklärt:
-   * - Geht durch jedes Element und erstellt ein neues Array
-   * - Wenn group.id === groupId: Verändere diese Gruppe
-   * - Sonst: Behalte die Gruppe unverändert
-   * - Ergebnis: Neues Array mit einer modifizierten Gruppe
+   * Der linkCode ist das, was der Teilnehmer später eingibt!
+   * Format: name + zufällige Zahl (z.B. "heidi472")
    */
   const addParticipant = (groupId) => {
     const participantName = prompt('Name des Teilnehmers:');
     if (!participantName) return;
 
-    // Erstelle einen "lesbaren" Link-Code aus dem Namen
-    // .toLowerCase() = in Kleinbuchstaben
-    // .replace(/\s+/g, '') = entfernt alle Leerzeichen (Regex)
-    // .substring(0, 10) = maximal 10 Zeichen
-    const linkCode = participantName.toLowerCase().replace(/\s+/g, '').substring(0, 10) + Date.now() % 1000;
+    // Erstelle einen kurzen, merkbaren Link-Code
+    // toLowerCase() = Kleinbuchstaben
+    // replace(/\s+/g, '') = Entferne alle Leerzeichen
+    // Date.now() % 1000 = Zufällige 3-stellige Zahl
+    const linkCode = participantName.toLowerCase().replace(/\s+/g, '').substring(0, 10) + (Date.now() % 1000);
 
     const newParticipant = {
       id: Date.now(),
       name: participantName,
-      linkCode: linkCode, // z.B. "heidi472"
+      linkCode: linkCode,
       profile: {
-        imageUrl: null, // Kein Bild am Anfang
-        wishes: '', // Wünsche (leerer String)
-        likes: '', // Mag ich
-        dislikes: '', // Mag ich nicht
-        hobbies: '', // Hobbies
-        notes: '' // Zusätzliche Notizen
+        imageUrl: null,
+        wishes: '',
+        likes: '',
+        dislikes: '',
+        hobbies: '',
+        notes: ''
       },
-      assignedTo: null // Wem wurde dieser Teilnehmer zugewiesen? (null = noch nicht)
+      assignedTo: null
     };
 
-    // Finde die richtige Gruppe und füge den Teilnehmer hinzu
     const updatedGroups = groups.map(group => {
       if (group.id === groupId) {
-        // Spread-Operator für Objekte: { ...group } erstellt eine Kopie
-        // Dann überschreiben wir die participants-Eigenschaft
         return {
           ...group,
           participants: [...group.participants, newParticipant]
         };
       }
-      return group; // Andere Gruppen unverändert zurückgeben
+      return group;
     });
 
     setGroups(updatedGroups);
     saveGroups(updatedGroups);
     
-    alert(`Teilnehmer hinzugefügt!\n\nLink für ${participantName}:\n${window.location.origin}/wichtel/${linkCode}\n\nDiesen Link an ${participantName} schicken!`);
+    // Zeige den Link-Code an - DAS muss der Teilnehmer eingeben!
+    alert(`Teilnehmer hinzugefügt!\n\n📱 Link-Code für ${participantName}:\n\n${linkCode}\n\nDiesen Code beim "Teilnehmer-Login" eingeben!`);
   };
 
-  /**
-   * deleteParticipant - Löscht einen Teilnehmer aus einer Gruppe
-   */
   const deleteParticipant = (groupId, participantId) => {
     if (!confirm('Teilnehmer wirklich löschen?')) return;
 
@@ -258,15 +183,10 @@ function WichtelApp() {
   };
 
   /**
-   * shuffleWichtel - Verteilt die Wichtel zufällig
+   * shuffleWichtel - Fisher-Yates Shuffle Algorithmus
    * 
-   * Der Fisher-Yates Shuffle-Algorithmus:
-   * - Geht rückwärts durch das Array
-   * - Tauscht jedes Element mit einem zufälligen Element davor
-   * - Ergebnis: Faire, gleichverteilte Zufallsverteilung
-   * 
-   * Parameter:
-   * - groupId: Die ID der Gruppe
+   * Verteilt die Wichtel fair und zufällig
+   * Jeder bekommt genau einen Wichtel, niemand sich selbst
    */
   const shuffleWichtel = (groupId) => {
     const group = groups.find(g => g.id === groupId);
@@ -280,30 +200,19 @@ function WichtelApp() {
       return;
     }
 
-    // Erstelle eine Kopie des Teilnehmer-Arrays für die Zuteilung
     const participants = [...group.participants];
     const shuffled = [...participants];
     
-    // Fisher-Yates Shuffle-Algorithmus
-    // Warum rückwärts? Damit wir bereits gemischte Elemente nicht nochmal anfassen
+    // Fisher-Yates Shuffle
     for (let i = shuffled.length - 1; i > 0; i--) {
-      // Math.random() gibt eine Zahl zwischen 0 und 1
-      // Math.floor() rundet ab
-      // Ergebnis: Zufälliger Index zwischen 0 und i
       const j = Math.floor(Math.random() * (i + 1));
-      
-      // Destrukturierung zum Tauschen: [a, b] = [b, a]
-      // Tauscht shuffled[i] und shuffled[j]
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
 
-    // Weise jedem Teilnehmer den nächsten in der gemischten Liste zu
-    // Der letzte bekommt den ersten (Kreis schließen)
+    // Weise zu: Jeder bekommt den nächsten in der Liste
+    // Der letzte bekommt den ersten (Kreis)
     const updatedParticipants = participants.map((participant, index) => {
-      // Modulo (%) erklärt: Rest der Division
-      // (index + 1) % length sorgt dafür, dass nach dem letzten wieder der erste kommt
       const nextIndex = (index + 1) % shuffled.length;
-      
       return {
         ...participant,
         assignedTo: shuffled[nextIndex].id
@@ -323,28 +232,25 @@ function WichtelApp() {
 
     setGroups(updatedGroups);
     saveGroups(updatedGroups);
-    alert('Wichtel wurden verteilt! 🎄');
+    alert('Wichtel wurden verteilt! 🎄\n\nJeder Teilnehmer kann sich jetzt mit seinem Link-Code einloggen!');
   };
 
   // ==================== TEILNEHMER-FUNKTIONEN ====================
 
   /**
-   * loadParticipantByLink - Lädt einen Teilnehmer anhand seines Link-Codes
+   * loadParticipantByLink - Findet einen Teilnehmer anhand des Link-Codes
    * 
-   * Parameter:
-   * - linkCode: Der eindeutige Code aus der URL (z.B. "heidi472")
-   * 
-   * Array.find erklärt:
-   * - Sucht das ERSTE Element, für das die Bedingung true ist
-   * - Gibt das gefundene Element zurück oder undefined
+   * Der Link-Code ist z.B. "heidi472"
+   * Durchsucht alle Gruppen nach diesem Code
    */
   const loadParticipantByLink = (linkCode) => {
-    // Durchsuche alle Gruppen
+    console.log('Suche Teilnehmer mit Code:', linkCode);
+    
     for (const group of groups) {
-      // Suche in den Teilnehmern der Gruppe
       const participant = group.participants.find(p => p.linkCode === linkCode);
       
       if (participant) {
+        console.log('Teilnehmer gefunden:', participant.name);
         setSelectedGroup(group);
         setSelectedParticipant(participant);
         setCurrentView('participant');
@@ -352,15 +258,12 @@ function WichtelApp() {
       }
     }
     
-    alert('Ungültiger Link!');
+    alert('Ungültiger Link-Code! Bitte den Code nochmal prüfen.');
     return false;
   };
 
   /**
-   * updateParticipantProfile - Aktualisiert das Profil eines Teilnehmers
-   * 
-   * Parameter:
-   * - updatedProfile: Das neue Profil-Objekt
+   * updateParticipantProfile - Speichert Profil-Änderungen
    */
   const updateParticipantProfile = (updatedProfile) => {
     const updatedGroups = groups.map(group => {
@@ -384,7 +287,7 @@ function WichtelApp() {
     setGroups(updatedGroups);
     saveGroups(updatedGroups);
     
-    // Aktualisiere auch den lokalen State
+    // Aktualisiere lokalen State
     setSelectedParticipant({
       ...selectedParticipant,
       profile: updatedProfile
@@ -394,32 +297,25 @@ function WichtelApp() {
   };
 
   /**
-   * handleImageUpload - Verarbeitet den Bild-Upload
-   * 
-   * Parameter:
-   * - e: Das File-Input-Event
+   * handleImageUpload - Konvertiert Bild zu Base64
    * 
    * FileReader erklärt:
-   * - Liest Dateien vom Computer des Users
-   * - readAsDataURL: Konvertiert die Datei in Base64-String
-   * - Base64: Text-Repräsentation von Binärdaten (kann in img src verwendet werden)
+   * - Liest Dateien vom Computer
+   * - readAsDataURL wandelt in Base64-String um
+   * - Base64 kann direkt in <img src="..."> verwendet werden
    */
   const handleImageUpload = (e) => {
-    const file = e.target.files[0]; // Die erste ausgewählte Datei
+    const file = e.target.files[0];
     if (!file) return;
 
-    // Prüfe, ob es ein Bild ist
     if (!file.type.startsWith('image/')) {
       alert('Bitte wähle eine Bilddatei aus!');
       return;
     }
 
-    // FileReader erstellen und konfigurieren
     const reader = new FileReader();
     
-    // Diese Funktion wird aufgerufen, wenn das Bild geladen ist
     reader.onloadend = () => {
-      // reader.result enthält jetzt den Base64-String des Bildes
       const updatedProfile = {
         ...selectedParticipant.profile,
         imageUrl: reader.result
@@ -427,23 +323,10 @@ function WichtelApp() {
       updateParticipantProfile(updatedProfile);
     };
 
-    // Starte das Lesen der Datei
     reader.readAsDataURL(file);
   };
 
   // ==================== RENDERING ====================
-  /**
-   * JSX erklärt:
-   * - Sieht aus wie HTML, ist aber JavaScript
-   * - Geschweifte Klammern ermöglichen JavaScript-Ausdrücke innerhalb von JSX
-   * - className statt class (class ist ein reserviertes Wort in JS)
-   * - onClick mit Funktion statt onclick mit String
-   * - Selbstschließende Tags müssen Schrägstrich haben
-   * 
-   * Bedingtes Rendering:
-   * - wenn condition && Component = zeige Component nur wenn condition true ist
-   * - wenn condition ? A : B = wenn condition true zeige A, sonst B
-   */
 
   // ===== HOME VIEW =====
   if (currentView === 'home') {
@@ -472,8 +355,8 @@ function WichtelApp() {
               
               <button
                 onClick={() => {
-                  const code = prompt('Gib deinen persönlichen Link-Code ein:');
-                  if (code) loadParticipantByLink(code);
+                  const code = prompt('Gib deinen Link-Code ein (z.B. heidi472):');
+                  if (code) loadParticipantByLink(code.trim().toLowerCase());
                 }}
                 className="bg-green-500 hover:bg-green-600 text-white font-semibold py-4 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
               >
@@ -482,9 +365,12 @@ function WichtelApp() {
               </button>
             </div>
 
-            <div className="mt-6 text-sm text-gray-500">
+            <div className="mt-6 text-sm text-gray-500 space-y-2">
               <p>💡 <strong>Admin:</strong> Erstelle Gruppen und verwalte Teilnehmer</p>
               <p>🎁 <strong>Teilnehmer:</strong> Fülle dein Profil aus und sieh deinen Wichtel</p>
+              <p className="text-xs mt-4 text-gray-400">
+                Tipp: Der Link-Code wird dir vom Admin geschickt!
+              </p>
             </div>
           </div>
         </div>
@@ -592,8 +478,8 @@ function WichtelApp() {
                       <div key={participant.id} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
                         <div>
                           <p className="font-semibold">{participant.name}</p>
-                          <p className="text-xs text-gray-500 font-mono">
-                            Link: /wichtel/{participant.linkCode}
+                          <p className="text-xs text-gray-500 font-mono bg-yellow-100 px-2 py-1 rounded inline-block">
+                            Link-Code: {participant.linkCode}
                           </p>
                         </div>
                         <button
@@ -814,15 +700,6 @@ function WichtelApp() {
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-
-          {selectedGroup.isShuffled && !assignedWichtel && (
-            <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-6 text-center">
-              <p className="text-yellow-800">
-                Die Wichtel wurden verteilt, aber es gab ein Problem bei der Zuteilung. 
-                Bitte kontaktiere den Admin.
-              </p>
             </div>
           )}
 
