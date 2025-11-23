@@ -1,14 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Gift, Users, Shuffle, Plus, Trash2, Upload, Eye, EyeOff } from 'lucide-react';
+import { Gift, Users, Shuffle, Plus, Trash2, Upload } from 'lucide-react';
+import { db } from './firebase';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
 
 /**
- * WICHTEL-WEBAPP - Hauptkomponente (Netlify-Version)
+ * WICHTEL-WEBAPP - Firebase Version
  * 
- * Diese Version nutzt localStorage statt window.storage
- * localStorage ist ein Browser-Feature, das Daten lokal speichert
- * - Funktioniert in jedem Browser
- * - Daten bleiben auch nach Seiten-Reload erhalten
- * - Wird pro Domain gespeichert
+ * Diese Version nutzt Firebase Firestore als Datenbank
+ * - Alle Daten werden in der Cloud gespeichert
+ * - Echtzeit-Synchronisation zwischen allen Nutzern
+ * - Funktioniert auf allen Geräten
+ * 
+ * Firestore erklärt:
+ * - collection: Eine "Tabelle" in der Datenbank (z.B. "groups")
+ * - doc: Ein einzelnes Dokument (z.B. eine Gruppe)
+ * - addDoc: Neues Dokument hinzufügen
+ * - updateDoc: Dokument aktualisieren
+ * - deleteDoc: Dokument löschen
+ * - onSnapshot: Echtzeit-Listener (Updates automatisch)
  */
 
 function WichtelApp() {
@@ -19,65 +28,46 @@ function WichtelApp() {
   const [selectedParticipant, setSelectedParticipant] = useState(null);
   const [adminPassword, setAdminPassword] = useState('');
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // ==================== DATEN LADEN UND SPEICHERN ====================
+  // ==================== FIREBASE DATEN LADEN ====================
   
   /**
-   * useEffect - Lädt Daten beim Start der App
+   * useEffect - Lädt Gruppen aus Firebase beim Start
+   * 
+   * onSnapshot erklärt:
+   * - Hört auf Änderungen in der Datenbank
+   * - Wird automatisch aufgerufen, wenn sich Daten ändern
+   * - Echtzeit-Updates ohne Reload!
    */
   useEffect(() => {
-    loadGroups();
-  }, []);
-
-  /**
-   * loadGroups - Lädt gespeicherte Gruppen aus localStorage
-   * 
-   * localStorage erklärt:
-   * - localStorage.getItem('key') holt einen gespeicherten Wert
-   * - Gibt einen String zurück oder null wenn nicht vorhanden
-   * - JSON.parse() wandelt den String zurück in ein JavaScript-Objekt
-   */
-  const loadGroups = () => {
-    try {
-      // Hole den gespeicherten String aus localStorage
-      const savedGroups = localStorage.getItem('wichtel-groups');
+    // Referenz zur "groups" Collection in Firestore
+    const groupsCollection = collection(db, 'groups');
+    
+    // Echtzeit-Listener aufsetzen
+    const unsubscribe = onSnapshot(groupsCollection, (snapshot) => {
+      const loadedGroups = [];
       
-      if (savedGroups) {
-        // Wandle den JSON-String zurück in ein Array
-        const parsedGroups = JSON.parse(savedGroups);
-        setGroups(parsedGroups);
-        console.log('Gruppen geladen:', parsedGroups.length);
-      } else {
-        console.log('Keine gespeicherten Gruppen gefunden');
-      }
-    } catch (error) {
+      // Durchlaufe alle Dokumente
+      snapshot.forEach((doc) => {
+        loadedGroups.push({
+          firebaseId: doc.id, // Firebase-ID (brauchen wir für Updates)
+          ...doc.data() // Alle Daten aus dem Dokument
+        });
+      });
+      
+      setGroups(loadedGroups);
+      setLoading(false);
+      console.log('Gruppen geladen:', loadedGroups.length);
+    }, (error) => {
       console.error('Fehler beim Laden:', error);
-      // Bei Fehler: Leeres Array verwenden
-      setGroups([]);
-    }
-  };
-
-  /**
-   * saveGroups - Speichert alle Gruppen in localStorage
-   * 
-   * localStorage.setItem erklärt:
-   * - localStorage.setItem('key', 'value') speichert einen Wert
-   * - Kann nur Strings speichern, daher JSON.stringify()
-   * - Bleibt gespeichert bis der Browser-Cache gelöscht wird
-   */
-  const saveGroups = (updatedGroups) => {
-    try {
-      // Wandle das Array in einen JSON-String um
-      const jsonString = JSON.stringify(updatedGroups);
-      
-      // Speichere in localStorage
-      localStorage.setItem('wichtel-groups', jsonString);
-      console.log('Gruppen gespeichert:', updatedGroups.length);
-    } catch (error) {
-      console.error('Fehler beim Speichern:', error);
-      alert('Fehler beim Speichern der Daten. Ist der Browser-Speicher voll?');
-    }
-  };
+      setLoading(false);
+      alert('Fehler beim Laden der Daten. Bitte Seite neu laden.');
+    });
+    
+    // Cleanup: Listener entfernen wenn Component unmounted
+    return () => unsubscribe();
+  }, []);
 
   // ==================== ADMIN-FUNKTIONEN ====================
   
@@ -90,106 +80,125 @@ function WichtelApp() {
     }
   };
 
-  const createGroup = () => {
+  /**
+   * createGroup - Erstellt eine neue Gruppe in Firebase
+   * 
+   * addDoc erklärt:
+   * - Fügt ein neues Dokument zur Collection hinzu
+   * - Firebase generiert automatisch eine eindeutige ID
+   * - Gibt eine Promise zurück (daher async/await)
+   */
+  const createGroup = async () => {
     const groupName = prompt('Name der Wichtelgruppe:');
     if (!groupName) return;
 
-    const newGroup = {
-      id: Date.now(),
-      name: groupName,
-      participants: [],
-      isShuffled: false,
-      createdAt: new Date().toISOString()
-    };
+    try {
+      const newGroup = {
+        id: Date.now(),
+        name: groupName,
+        participants: [],
+        isShuffled: false,
+        createdAt: new Date().toISOString()
+      };
 
-    const updatedGroups = [...groups, newGroup];
-    setGroups(updatedGroups);
-    saveGroups(updatedGroups);
-    
-    alert(`Gruppe "${groupName}" erstellt!`);
-  };
-
-  const deleteGroup = (groupId) => {
-    if (!confirm('Gruppe wirklich löschen? Alle Daten gehen verloren!')) return;
-    
-    const updatedGroups = groups.filter(g => g.id !== groupId);
-    setGroups(updatedGroups);
-    saveGroups(updatedGroups);
+      // Füge zur Firebase-Collection hinzu
+      await addDoc(collection(db, 'groups'), newGroup);
+      
+      alert(`Gruppe "${groupName}" erstellt!`);
+    } catch (error) {
+      console.error('Fehler beim Erstellen:', error);
+      alert('Fehler beim Erstellen der Gruppe');
+    }
   };
 
   /**
-   * addParticipant - Fügt einen neuen Teilnehmer hinzu
+   * deleteGroup - Löscht eine Gruppe aus Firebase
    * 
-   * Der linkCode ist das, was der Teilnehmer später eingibt!
-   * Format: name + zufällige Zahl (z.B. "heidi472")
+   * deleteDoc erklärt:
+   * - Löscht ein Dokument anhand seiner Firebase-ID
+   * - doc(db, 'collection', 'id') erstellt eine Referenz zum Dokument
    */
-  const addParticipant = (groupId) => {
+  const deleteGroup = async (firebaseId) => {
+    if (!confirm('Gruppe wirklich löschen? Alle Daten gehen verloren!')) return;
+    
+    try {
+      // Lösche das Dokument aus Firebase
+      await deleteDoc(doc(db, 'groups', firebaseId));
+    } catch (error) {
+      console.error('Fehler beim Löschen:', error);
+      alert('Fehler beim Löschen der Gruppe');
+    }
+  };
+
+  /**
+   * addParticipant - Fügt einen Teilnehmer zur Gruppe hinzu
+   * 
+   * updateDoc erklärt:
+   * - Aktualisiert ein bestehendes Dokument
+   * - Nur die angegebenen Felder werden geändert
+   */
+  const addParticipant = async (firebaseId, groupId) => {
     const participantName = prompt('Name des Teilnehmers:');
     if (!participantName) return;
 
-    // Erstelle einen kurzen, merkbaren Link-Code
-    // toLowerCase() = Kleinbuchstaben
-    // replace(/\s+/g, '') = Entferne alle Leerzeichen
-    // Date.now() % 1000 = Zufällige 3-stellige Zahl
-    const linkCode = participantName.toLowerCase().replace(/\s+/g, '').substring(0, 10) + (Date.now() % 1000);
+    try {
+      // Finde die Gruppe
+      const group = groups.find(g => g.firebaseId === firebaseId);
+      if (!group) return;
 
-    const newParticipant = {
-      id: Date.now(),
-      name: participantName,
-      linkCode: linkCode,
-      profile: {
-        imageUrl: null,
-        wishes: '',
-        likes: '',
-        dislikes: '',
-        hobbies: '',
-        notes: ''
-      },
-      assignedTo: null
-    };
+      // Erstelle neuen Teilnehmer
+      const linkCode = participantName.toLowerCase().replace(/\s+/g, '').substring(0, 10) + (Date.now() % 1000);
 
-    const updatedGroups = groups.map(group => {
-      if (group.id === groupId) {
-        return {
-          ...group,
-          participants: [...group.participants, newParticipant]
-        };
-      }
-      return group;
-    });
+      const newParticipant = {
+        id: Date.now(),
+        name: participantName,
+        linkCode: linkCode,
+        profile: {
+          imageUrl: null,
+          wishes: '',
+          likes: '',
+          dislikes: '',
+          hobbies: '',
+          notes: ''
+        },
+        assignedTo: null
+      };
 
-    setGroups(updatedGroups);
-    saveGroups(updatedGroups);
-    
-    // Zeige den Link-Code an - DAS muss der Teilnehmer eingeben!
-    alert(`Teilnehmer hinzugefügt!\n\n📱 Link-Code für ${participantName}:\n\n${linkCode}\n\nDiesen Code beim "Teilnehmer-Login" eingeben!`);
+      // Aktualisiere die Gruppe in Firebase
+      const updatedParticipants = [...group.participants, newParticipant];
+      await updateDoc(doc(db, 'groups', firebaseId), {
+        participants: updatedParticipants
+      });
+      
+      alert(`Teilnehmer hinzugefügt!\n\n📱 Link-Code für ${participantName}:\n\n${linkCode}\n\nDiesen Code beim "Teilnehmer-Login" eingeben!`);
+    } catch (error) {
+      console.error('Fehler beim Hinzufügen:', error);
+      alert('Fehler beim Hinzufügen des Teilnehmers');
+    }
   };
 
-  const deleteParticipant = (groupId, participantId) => {
+  const deleteParticipant = async (firebaseId, participantId) => {
     if (!confirm('Teilnehmer wirklich löschen?')) return;
 
-    const updatedGroups = groups.map(group => {
-      if (group.id === groupId) {
-        return {
-          ...group,
-          participants: group.participants.filter(p => p.id !== participantId)
-        };
-      }
-      return group;
-    });
+    try {
+      const group = groups.find(g => g.firebaseId === firebaseId);
+      if (!group) return;
 
-    setGroups(updatedGroups);
-    saveGroups(updatedGroups);
+      const updatedParticipants = group.participants.filter(p => p.id !== participantId);
+      await updateDoc(doc(db, 'groups', firebaseId), {
+        participants: updatedParticipants
+      });
+    } catch (error) {
+      console.error('Fehler beim Löschen:', error);
+      alert('Fehler beim Löschen des Teilnehmers');
+    }
   };
 
   /**
-   * shuffleWichtel - Fisher-Yates Shuffle Algorithmus
-   * 
-   * Verteilt die Wichtel fair und zufällig
-   * Jeder bekommt genau einen Wichtel, niemand sich selbst
+   * shuffleWichtel - Fisher-Yates Shuffle mit Firebase-Update
    */
-  const shuffleWichtel = (groupId) => {
-    const group = groups.find(g => g.id === groupId);
+  const shuffleWichtel = async (firebaseId) => {
+    const group = groups.find(g => g.firebaseId === firebaseId);
     
     if (!group || group.participants.length < 2) {
       alert('Mindestens 2 Teilnehmer nötig!');
@@ -200,48 +209,42 @@ function WichtelApp() {
       return;
     }
 
-    const participants = [...group.participants];
-    const shuffled = [...participants];
-    
-    // Fisher-Yates Shuffle
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-
-    // Weise zu: Jeder bekommt den nächsten in der Liste
-    // Der letzte bekommt den ersten (Kreis)
-    const updatedParticipants = participants.map((participant, index) => {
-      const nextIndex = (index + 1) % shuffled.length;
-      return {
-        ...participant,
-        assignedTo: shuffled[nextIndex].id
-      };
-    });
-
-    const updatedGroups = groups.map(g => {
-      if (g.id === groupId) {
-        return {
-          ...g,
-          participants: updatedParticipants,
-          isShuffled: true
-        };
+    try {
+      const participants = [...group.participants];
+      const shuffled = [...participants];
+      
+      // Fisher-Yates Shuffle
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
-      return g;
-    });
 
-    setGroups(updatedGroups);
-    saveGroups(updatedGroups);
-    alert('Wichtel wurden verteilt! 🎄\n\nJeder Teilnehmer kann sich jetzt mit seinem Link-Code einloggen!');
+      // Zuweisungen erstellen
+      const updatedParticipants = participants.map((participant, index) => {
+        const nextIndex = (index + 1) % shuffled.length;
+        return {
+          ...participant,
+          assignedTo: shuffled[nextIndex].id
+        };
+      });
+
+      // In Firebase speichern
+      await updateDoc(doc(db, 'groups', firebaseId), {
+        participants: updatedParticipants,
+        isShuffled: true
+      });
+
+      alert('Wichtel wurden verteilt! 🎄\n\nJeder Teilnehmer kann sich jetzt mit seinem Link-Code einloggen!');
+    } catch (error) {
+      console.error('Fehler beim Verteilen:', error);
+      alert('Fehler beim Verteilen der Wichtel');
+    }
   };
 
   // ==================== TEILNEHMER-FUNKTIONEN ====================
 
   /**
    * loadParticipantByLink - Findet einen Teilnehmer anhand des Link-Codes
-   * 
-   * Der Link-Code ist z.B. "heidi472"
-   * Durchsucht alle Gruppen nach diesem Code
    */
   const loadParticipantByLink = (linkCode) => {
     console.log('Suche Teilnehmer mit Code:', linkCode);
@@ -263,13 +266,9 @@ function WichtelApp() {
   };
 
   /**
-   * updateParticipantProfile - Aktualisiert nur den lokalen State (OHNE Speichern)
-   * 
-   * Wird bei jeder Tastatureingabe aufgerufen
-   * Speichert NICHT in localStorage (das macht saveParticipantProfile)
+   * updateParticipantProfile - Nur lokaler State (ohne Speichern)
    */
   const updateParticipantProfile = (updatedProfile) => {
-    // Aktualisiere nur den lokalen State
     setSelectedParticipant({
       ...selectedParticipant,
       profile: updatedProfile
@@ -277,44 +276,37 @@ function WichtelApp() {
   };
 
   /**
-   * saveParticipantProfile - Speichert das Profil dauerhaft
-   * 
-   * Wird nur beim Klick auf den Speichern-Button aufgerufen
+   * saveParticipantProfile - Speichert das Profil in Firebase
    */
-  const saveParticipantProfile = () => {
-    const updatedGroups = groups.map(group => {
-      if (group.id === selectedGroup.id) {
-        return {
-          ...group,
-          participants: group.participants.map(p => {
-            if (p.id === selectedParticipant.id) {
-              return {
-                ...p,
-                profile: selectedParticipant.profile
-              };
-            }
-            return p;
-          })
-        };
-      }
-      return group;
-    });
+  const saveParticipantProfile = async () => {
+    try {
+      // Finde die Gruppe und aktualisiere den Teilnehmer
+      const updatedParticipants = selectedGroup.participants.map(p => {
+        if (p.id === selectedParticipant.id) {
+          return {
+            ...p,
+            profile: selectedParticipant.profile
+          };
+        }
+        return p;
+      });
 
-    setGroups(updatedGroups);
-    saveGroups(updatedGroups);
-    
-    alert('Profil gespeichert! ✓');
+      // Speichere in Firebase
+      await updateDoc(doc(db, 'groups', selectedGroup.firebaseId), {
+        participants: updatedParticipants
+      });
+      
+      alert('Profil gespeichert! ✓');
+    } catch (error) {
+      console.error('Fehler beim Speichern:', error);
+      alert('Fehler beim Speichern des Profils');
+    }
   };
 
   /**
-   * handleImageUpload - Konvertiert Bild zu Base64
-   * 
-   * FileReader erklärt:
-   * - Liest Dateien vom Computer
-   * - readAsDataURL wandelt in Base64-String um
-   * - Base64 kann direkt in <img src="..."> verwendet werden
+   * handleImageUpload - Konvertiert Bild zu Base64 und speichert in Firebase
    */
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -323,20 +315,65 @@ function WichtelApp() {
       return;
     }
 
+    // Prüfe Dateigröße (max 1MB für Firebase)
+    if (file.size > 1024 * 1024) {
+      alert('Bild ist zu groß! Bitte max. 1MB.');
+      return;
+    }
+
     const reader = new FileReader();
     
-    reader.onloadend = () => {
-      const updatedProfile = {
-        ...selectedParticipant.profile,
-        imageUrl: reader.result
-      };
-      updateParticipantProfile(updatedProfile);
+    reader.onloadend = async () => {
+      try {
+        const updatedProfile = {
+          ...selectedParticipant.profile,
+          imageUrl: reader.result
+        };
+        
+        // Lokaler State
+        setSelectedParticipant({
+          ...selectedParticipant,
+          profile: updatedProfile
+        });
+        
+        // Firebase Update
+        const updatedParticipants = selectedGroup.participants.map(p => {
+          if (p.id === selectedParticipant.id) {
+            return {
+              ...p,
+              profile: updatedProfile
+            };
+          }
+          return p;
+        });
+        
+        await updateDoc(doc(db, 'groups', selectedGroup.firebaseId), {
+          participants: updatedParticipants
+        });
+        
+        alert('Bild hochgeladen! ✓');
+      } catch (error) {
+        console.error('Fehler beim Upload:', error);
+        alert('Fehler beim Hochladen des Bildes');
+      }
     };
 
     reader.readAsDataURL(file);
   };
 
   // ==================== RENDERING ====================
+
+  // Loading State
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-green-50 p-4 flex items-center justify-center">
+        <div className="text-center">
+          <Gift className="w-16 h-16 mx-auto text-red-500 mb-4 animate-bounce" />
+          <p className="text-gray-600">Lade Daten...</p>
+        </div>
+      </div>
+    );
+  }
 
   // ===== HOME VIEW =====
   if (currentView === 'home') {
@@ -466,7 +503,7 @@ function WichtelApp() {
               </div>
             ) : (
               groups.map(group => (
-                <div key={group.id} className="bg-white rounded-xl shadow-lg p-6">
+                <div key={group.firebaseId} className="bg-white rounded-xl shadow-lg p-6">
                   <div className="flex justify-between items-start mb-4">
                     <div>
                       <h3 className="text-xl font-bold text-gray-800">{group.name}</h3>
@@ -476,7 +513,7 @@ function WichtelApp() {
                       </p>
                     </div>
                     <button
-                      onClick={() => deleteGroup(group.id)}
+                      onClick={() => deleteGroup(group.firebaseId)}
                       className="text-red-500 hover:text-red-600"
                     >
                       <Trash2 className="w-5 h-5" />
@@ -493,7 +530,7 @@ function WichtelApp() {
                           </p>
                         </div>
                         <button
-                          onClick={() => deleteParticipant(group.id, participant.id)}
+                          onClick={() => deleteParticipant(group.firebaseId, participant.id)}
                           className="text-red-500 hover:text-red-600"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -504,14 +541,14 @@ function WichtelApp() {
 
                   <div className="flex gap-2">
                     <button
-                      onClick={() => addParticipant(group.id)}
+                      onClick={() => addParticipant(group.firebaseId, group.id)}
                       className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
                     >
                       <Plus className="w-4 h-4" />
                       Teilnehmer hinzufügen
                     </button>
                     <button
-                      onClick={() => shuffleWichtel(group.id)}
+                      onClick={() => shuffleWichtel(group.firebaseId)}
                       className="flex-1 bg-purple-500 hover:bg-purple-600 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
                     >
                       <Shuffle className="w-4 h-4" />
@@ -570,6 +607,7 @@ function WichtelApp() {
                     />
                   </label>
                 </div>
+                <p className="text-xs text-gray-500 mt-1">Max. 1MB</p>
               </div>
 
               <div>
@@ -652,7 +690,6 @@ function WichtelApp() {
                 />
               </div>
 
-              {/* SPEICHERN-BUTTON */}
               <button
                 onClick={saveParticipantProfile}
                 className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
