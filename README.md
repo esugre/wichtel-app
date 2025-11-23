@@ -4,8 +4,6 @@ Eine kleine Web-App zum Organisieren von Wichtel-Aktionen (Secret
 Santa). Teilnehmende werden eingetragen, zufällig einander zugewiesen
 und können ihre Wichtel-Zuteilung bequem online einsehen.
 
-> **Hinweis:** Diese README wurde halbautomatisch erstellt. Passe
-> Beschreibung & Screens ggf. nach deinen Bedürfnissen an.
 
 ## Features
 
